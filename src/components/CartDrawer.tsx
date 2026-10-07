@@ -2,63 +2,70 @@
 
 import React, { useState } from 'react';
 import { useCart } from '@/context/CartContext';
-import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, MessageSquare, CreditCard, ShieldAlert } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, ArrowLeft, ShieldCheck, Check, CreditCard, Banknote } from 'lucide-react';
 import { STORE_INFO } from '@/data/products';
 
 export function CartDrawer() {
   const { cart, isCartOpen, setIsCartOpen, removeFromCart, updateQuantity, clearCart, subtotal } = useCart();
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'whatsapp' | 'card_installments'>('whatsapp');
-  const [installmentsCount, setInstallmentsCount] = useState<number>(3);
+  
+  // Pasos de compra: 1. Carrito -> 2. Datos y Envío -> 3. Pago
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'payphone'>('transfer');
 
-  // Datos del cliente
+  // Formulario Facturación y Envío (Ecuador)
   const [customer, setCustomer] = useState({
     name: '',
+    idNumber: '', // Cédula o RUC
     phone: '',
-    city: '',
-    notes: ''
+    email: '',
+    address: '',
+    city: 'Guayaquil',
+    province: 'Guayas'
   });
 
   if (!isCartOpen) return null;
 
-  const shipping = subtotal > 150 || subtotal === 0 ? 0 : 5.00; // Envíos locales en Ecuador
-  const total = subtotal + shipping;
+  // Cálculos de Ecuador
+  const shippingServientrega = subtotal > 150 || subtotal === 0 ? 0 : 5.00;
+  const iva = 0; // Precios mostrados ya con IVA o transparentes
+  const cardFee = paymentMethod === 'payphone' ? subtotal * 0.05 : 0; // Recargo tarjeta 5% común en Ecuador
+  const total = subtotal + shippingServientrega + cardFee;
 
-  // Calculadora de cuotas estimada
-  const installmentValue = (total * (1 + (installmentsCount > 3 ? 0.08 : 0.04))) / installmentsCount;
-
-  const handleWhatsAppCheckout = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFinishWhatsApp = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
 
     let itemsList = cart
       .map(
         (item, index) =>
-          `${index + 1}. *${item.product.name}* x${item.quantity} - $${(item.product.price * item.quantity).toFixed(2)}`
+          `${index + 1}. *${item.product.name}* (x${item.quantity}) - $${(item.product.price * item.quantity).toFixed(2)}`
       )
       .join('\n');
 
-    let methodText = paymentMethod === 'card_installments'
-      ? `💳 *Pago:* Tarjeta de Crédito (${installmentsCount} cuotas de aprox. $${installmentValue.toFixed(2)})`
-      : `💵 *Pago:* Transferencia / Efectivo / Contraentrega`;
+    let paymentLabel = paymentMethod === 'payphone'
+      ? `💳 *Tarjeta / Payphone (+5%):* Diferido o Corriente (Link de cobro seguro)`
+      : `💵 *Transferencia / Efectivo:* Banco Pichincha / Guayaquil`;
 
-    let message = `🛒 *NUEVO PEDIDO - TECNICOMP ECUADOR*\n\n` +
-      `👤 *Cliente:* ${customer.name}\n` +
-      `📞 *Teléfono:* ${customer.phone}\n` +
-      `📍 *Ciudad / Dirección:* ${customer.city}\n` +
-      `${customer.notes ? `📝 *Observaciones:* ${customer.notes}\n` : ''}` +
-      `\n🛍️ *PRODUCTOS:*\n${itemsList}\n\n` +
+    let message = `🛒 *FINALIZAR COMPRA - TECNICOMP ECUADOR*\n\n` +
+      `📋 *DATOS DE FACTURACIÓN Y ENVÍO:*\n` +
+      `👤 *Nombre:* ${customer.name}\n` +
+      `🆔 *Cédula/RUC:* ${customer.idNumber}\n` +
+      `📞 *WhatsApp:* ${customer.phone}\n` +
+      `📧 *Email:* ${customer.email}\n` +
+      `📍 *Ciudad / Provincia:* ${customer.city}, ${customer.province}\n` +
+      `🏠 *Dirección:* ${customer.address}\n\n` +
+      `🛍️ *DETALLE DEL PEDIDO:*\n${itemsList}\n\n` +
       `📦 *Subtotal:* $${subtotal.toFixed(2)}\n` +
-      `🚚 *Envío:* ${shipping === 0 ? 'GRATIS' : `$${shipping.toFixed(2)}`}\n` +
-      `💰 *TOTAL A CANCELAR:* $${total.toFixed(2)}\n` +
-      `${methodText}\n\n` +
-      `_Por favor confirmar disponibilidad y datos de cuenta para finalizar la compra._`;
+      `🚚 *Envío Servientrega:* ${shippingServientrega === 0 ? 'GRATIS' : `$${shippingServientrega.toFixed(2)}`}\n` +
+      `${cardFee > 0 ? `💳 *Recargo tarjeta (5%):* $${cardFee.toFixed(2)}\n` : ''}` +
+      `💰 *TOTAL A PAGAR:* $${total.toFixed(2)} USD\n\n` +
+      `${paymentLabel}\n\n` +
+      `_Por favor confirmar pedido y coordinar entrega._`;
 
     const encoded = encodeURIComponent(message);
     window.open(`https://wa.me/${STORE_INFO.whatsappNumber}?text=${encoded}`, '_blank');
     
-    // Opcional: limpiar y cerrar
     clearCart();
-    setIsCheckingOut(false);
+    setStep(1);
     setIsCartOpen(false);
   };
 
@@ -66,280 +73,347 @@ export function CartDrawer() {
     <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
         onClick={() => setIsCartOpen(false)}
       />
 
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-slate-900 border-l border-slate-800 text-white flex flex-col shadow-2xl">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10">
+        <div className="w-screen max-w-lg bg-slate-900 border-l border-slate-800 text-white flex flex-col shadow-2xl">
           
-          {/* Header */}
-          <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <ShoppingBag className="w-6 h-6 text-cyan-400" />
-              <div>
-                <h2 className="text-xl font-bold tracking-tight">Tu Carrito</h2>
-                <p className="text-[11px] text-slate-400">Atención personalizada directa por WhatsApp</p>
+          {/* Header con Indicador de Pasos tipo MonsterWare */}
+          <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-950">
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => {
+                  if (step > 1) setStep((prev) => (prev - 1) as any);
+                  else setIsCartOpen(false);
+                }}
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white bg-slate-800 px-2.5 py-1.5 rounded-lg transition"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>{step === 1 ? 'Seguir comprando' : 'Atrás'}</span>
+              </button>
+
+              <h2 className="text-sm font-bold tracking-tight text-white">Finalizar compra</h2>
+
+              <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-semibold">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Pago protegido</span>
               </div>
             </div>
-            <button
-              onClick={() => setIsCartOpen(false)}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
+
+            {/* Pasos Visuales 1 -> 2 -> 3 */}
+            <div className="flex items-center justify-between max-w-xs mx-auto text-xs font-semibold">
+              <div className={`flex items-center gap-1.5 ${step >= 1 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${step > 1 ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 border border-emerald-400'}`}>
+                  {step > 1 ? '✓' : '1'}
+                </span>
+                <span>Carrito</span>
+              </div>
+              <div className="w-6 h-[1px] bg-slate-800" />
+
+              <div className={`flex items-center gap-1.5 ${step >= 2 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${step > 2 ? 'bg-emerald-500 text-slate-950' : step === 2 ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800'}`}>
+                  {step > 2 ? '✓' : '2'}
+                </span>
+                <span>Datos y envío</span>
+              </div>
+              <div className="w-6 h-[1px] bg-slate-800" />
+
+              <div className={`flex items-center gap-1.5 ${step === 3 ? 'text-cyan-400 font-bold' : 'text-slate-500'}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${step === 3 ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800'}`}>
+                  3
+                </span>
+                <span>Pago</span>
+              </div>
+            </div>
           </div>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto p-6">
-            {isCheckingOut ? (
-              <form onSubmit={handleWhatsAppCheckout} className="space-y-4">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                  <h3 className="font-semibold text-white">Datos para tu Pedido</h3>
-                  <button
-                    type="button"
-                    onClick={() => setIsCheckingOut(false)}
-                    className="text-xs text-cyan-400 hover:underline"
-                  >
-                    Editar Carrito
-                  </button>
-                </div>
+          {/* Contenido según el paso */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+            
+            {/* PASO 1: Lista de Productos en el Carrito */}
+            {step === 1 && (
+              <>
+                {cart.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center py-16">
+                    <ShoppingBag className="w-16 h-16 text-slate-700 mb-3" />
+                    <h3 className="text-base font-bold text-white mb-1">Tu carrito está vacío</h3>
+                    <p className="text-xs text-slate-400 max-w-xs mb-4">
+                      Explora nuestras impresoras Epson, repuestos y audio JBL.
+                    </p>
+                    <button
+                      onClick={() => setIsCartOpen(false)}
+                      className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs"
+                    >
+                      Ver Productos
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {cart.map((item) => (
+                      <div
+                        key={item.product.id}
+                        className="flex gap-3 p-3 bg-slate-800/60 rounded-2xl border border-slate-700/60 items-center"
+                      >
+                        <img
+                          src={item.product.image}
+                          alt={item.product.name}
+                          className="w-16 h-16 object-contain rounded-xl bg-slate-950 p-1 flex-shrink-0 border border-slate-700/50"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-bold text-white truncate">
+                            {item.product.name}
+                          </h4>
+                          <div className="text-xs font-black text-cyan-400 mt-0.5">
+                            ${item.product.price.toFixed(2)}
+                          </div>
+
+                          <div className="flex items-center justify-between mt-2">
+                            <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg px-2 py-0.5">
+                              <button
+                                onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                                className="text-slate-400 hover:text-white"
+                              >
+                                {item.quantity === 1 ? <Trash2 className="w-3 h-3 text-rose-400" /> : <Minus className="w-3 h-3" />}
+                              </button>
+                              <span className="text-xs font-bold px-1">{item.quantity}</span>
+                              <button
+                                onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                                className="text-slate-400 hover:text-white"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            <span className="text-xs font-bold text-slate-300">
+                              ${(item.product.price * item.quantity).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* PASO 2: Datos y Envío (Ecuador) */}
+            {step === 2 && (
+              <form id="step2-form" onSubmit={(e) => { e.preventDefault(); setStep(3); }} className="space-y-3.5">
+                <h3 className="text-sm font-bold text-white mb-2">Facturación y envío</h3>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Nombre Completo *</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nombres y apellidos *</label>
                   <input
                     required
                     type="text"
                     value={customer.name}
                     onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400"
-                    placeholder="Ej. Carlos Mendoza"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                    placeholder="Ej. Juan Pérez Mendoza"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">WhatsApp / Teléfono *</label>
-                  <input
-                    required
-                    type="tel"
-                    value={customer.phone}
-                    onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400"
-                    placeholder="Ej. 0991234567"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Ciudad y Dirección *</label>
-                  <input
-                    required
-                    type="text"
-                    value={customer.city}
-                    onChange={(e) => setCustomer({ ...customer, city: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400"
-                    placeholder="Ej. Guayaquil / Av. 9 de Octubre y Boyacá"
-                  />
-                </div>
-
-                {/* Forma de Pago */}
-                <div className="pt-2">
-                  <label className="block text-xs font-medium text-slate-300 mb-2">Forma de Pago Preferida</label>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod('whatsapp')}
-                      className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition ${
-                        paymentMethod === 'whatsapp'
-                          ? 'border-emerald-500 bg-emerald-950/30 text-white'
-                          : 'border-slate-800 bg-slate-800/40 text-slate-400'
-                      }`}
-                    >
-                      <span className="font-bold text-emerald-400">Transferencia / Depósito</span>
-                      <span className="text-[10px] text-slate-400">Banco Pichincha, Guayaquil o Efectivo</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod('card_installments')}
-                      className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition ${
-                        paymentMethod === 'card_installments'
-                          ? 'border-cyan-500 bg-cyan-950/30 text-white ring-1 ring-cyan-500/50'
-                          : 'border-slate-800 bg-slate-800/40 text-slate-400'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1 font-bold text-cyan-400">
-                          <CreditCard className="w-3.5 h-3.5" />
-                          <span>Tarjeta / Cuotas</span>
-                        </div>
-                        <span className="text-[9px] font-extrabold bg-orange-500/20 text-orange-400 border border-orange-500/30 px-1.5 py-0.5 rounded">
-                          Payphone
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-slate-400">Visa, Mastercard, Diners, Discover</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Si elige cuotas Payphone */}
-                {paymentMethod === 'card_installments' && (
-                  <div className="p-3 bg-gradient-to-br from-slate-900 to-cyan-950/40 border border-cyan-800/60 rounded-xl space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-cyan-300">
-                        Selecciona meses a diferir (Cuotas):
-                      </label>
-                      <span className="text-[10px] font-mono text-cyan-400 bg-cyan-900/40 px-2 py-0.5 rounded">
-                        Cobro seguro Payphone
-                      </span>
-                    </div>
-                    <select
-                      value={installmentsCount}
-                      onChange={(e) => setInstallmentsCount(Number(e.target.value))}
-                      className="w-full bg-slate-900 border border-cyan-700/60 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-cyan-400 font-medium"
-                    >
-                      <option value={3}>3 meses - (${((total * 1.04) / 3).toFixed(2)}/mes)</option>
-                      <option value={6}>6 meses - (${((total * 1.06) / 6).toFixed(2)}/mes)</option>
-                      <option value={12}>12 meses - (${((total * 1.09) / 12).toFixed(2)}/mes)</option>
-                    </select>
-                    <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-start gap-2 text-[11px] text-slate-300 leading-tight">
-                      <ShieldAlert className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
-                      <span>
-                        Al enviar tu pedido a WhatsApp te responderemos con tu <strong>Link de Pago oficial de Payphone</strong> para que difieras tus cuotas con tu banco de forma 100% cifrada y protegida.
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Notas o Preguntas Adicionales</label>
-                  <textarea
-                    rows={2}
-                    value={customer.notes}
-                    onChange={(e) => setCustomer({ ...customer, notes: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400"
-                    placeholder="Ej. Horario preferido de entrega o consultar modelo"
-                  />
-                </div>
-
-                {/* Resumen */}
-                <div className="bg-slate-800/70 p-4 rounded-xl border border-slate-700 space-y-1.5 text-xs">
-                  <div className="flex justify-between text-slate-400">
-                    <span>Subtotal:</span>
-                    <span className="text-white">${subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-400">
-                    <span>Envío:</span>
-                    <span className="text-emerald-400">{shipping === 0 ? '¡GRATIS!' : `$${shipping.toFixed(2)}`}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-sm text-white pt-2 border-t border-slate-700">
-                    <span>Total:</span>
-                    <span className="text-cyan-400">${total.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2"
-                >
-                  <MessageSquare className="w-5 h-5 fill-current" />
-                  Enviar Pedido a WhatsApp
-                </button>
-              </form>
-            ) : cart.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center py-12">
-                <ShoppingBag className="w-16 h-16 text-slate-700 mb-4" />
-                <h3 className="text-lg font-semibold text-slate-300 mb-1">Tu carrito está vacío</h3>
-                <p className="text-slate-500 text-sm max-w-xs mb-6">
-                  Agrega impresoras Epson, repuestos, parlantes JBL o solicita servicios técnicos.
-                </p>
-                <button
-                  onClick={() => setIsCartOpen(false)}
-                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold px-5 py-2.5 rounded-xl text-sm transition"
-                >
-                  Explorar Catálogo
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {cart.map((item) => (
-                  <div
-                    key={item.product.id}
-                    className="flex gap-4 p-3 bg-slate-800/60 rounded-xl border border-slate-700/50"
-                  >
-                    <img
-                      src={item.product.image}
-                      alt={item.product.name}
-                      className="w-20 h-20 object-cover rounded-lg bg-slate-900 flex-shrink-0"
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Cédula o RUC *</label>
+                    <input
+                      required
+                      type="text"
+                      value={customer.idNumber}
+                      onChange={(e) => setCustomer({ ...customer, idNumber: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                      placeholder="0912345678"
                     />
-                    <div className="flex-1 flex flex-col justify-between">
-                      <div>
-                        <h4 className="text-xs font-semibold text-white line-clamp-2">
-                          {item.product.name}
-                        </h4>
-                        <div className="text-xs text-cyan-400 font-bold mt-1">
-                          ${item.product.price.toFixed(2)}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center border border-slate-700 rounded-lg overflow-hidden bg-slate-800">
-                          <button
-                            onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                            className="p-1 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="px-3 text-xs font-semibold">{item.quantity}</span>
-                          <button
-                            onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                            className="p-1 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        <button
-                          onClick={() => removeFromCart(item.product.id)}
-                          className="text-slate-500 hover:text-rose-400 transition p-1"
-                          title="Eliminar producto"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
                   </div>
-                ))}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Teléfono / WhatsApp *</label>
+                    <input
+                      required
+                      type="tel"
+                      value={customer.phone}
+                      onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                      placeholder="0991234567"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Correo electrónico *</label>
+                  <input
+                    required
+                    type="email"
+                    value={customer.email}
+                    onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                    placeholder="cliente@ejemplo.com"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Ciudad *</label>
+                    <input
+                      required
+                      type="text"
+                      value={customer.city}
+                      onChange={(e) => setCustomer({ ...customer, city: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                      placeholder="Guayaquil / Quito"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Provincia *</label>
+                    <input
+                      required
+                      type="text"
+                      value={customer.province}
+                      onChange={(e) => setCustomer({ ...customer, province: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                      placeholder="Guayas, Pichincha, El Oro..."
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Dirección de envío *</label>
+                  <textarea
+                    required
+                    rows={2}
+                    value={customer.address}
+                    onChange={(e) => setCustomer({ ...customer, address: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+                    placeholder="Calle principal, secundaria y número de casa / referencia"
+                  />
+                </div>
+              </form>
+            )}
+
+            {/* PASO 3: Método de Pago (Transferencia / Payphone) */}
+            {step === 3 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-white">Método de pago</h3>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Opción 1: Transferencia */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('transfer')}
+                    className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition ${
+                      paymentMethod === 'transfer'
+                        ? 'border-emerald-500 bg-emerald-950/40 text-white ring-1 ring-emerald-500/50'
+                        : 'border-slate-800 bg-slate-800/40 text-slate-400'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-400 mb-1">
+                        <Banknote className="w-4 h-4" />
+                        <span>Transferencia / Efectivo</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 block">Sin recargo</span>
+                    </div>
+                  </button>
+
+                  {/* Opción 2: Tarjeta Payphone */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('payphone')}
+                    className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition ${
+                      paymentMethod === 'payphone'
+                        ? 'border-cyan-500 bg-cyan-950/40 text-white ring-1 ring-cyan-500/50'
+                        : 'border-slate-800 bg-slate-800/40 text-slate-400'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-cyan-400 mb-1">
+                        <CreditCard className="w-4 h-4" />
+                        <span>Tarjeta Payphone</span>
+                      </div>
+                      <span className="text-[10px] text-cyan-300 font-bold block">+5% recargo</span>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Mensaje descriptivo según método */}
+                <div className="p-3 bg-slate-800/80 border border-slate-700/80 rounded-2xl text-xs space-y-1 text-slate-300">
+                  {paymentMethod === 'transfer' ? (
+                    <p className="leading-relaxed">
+                      🏦 Te enviaremos el pedido por WhatsApp con las cuentas bancarias (Banco Pichincha y Guayaquil) para coordinar la transferencia o contraentrega.
+                    </p>
+                  ) : (
+                    <p className="leading-relaxed">
+                      💳 Recibirás tu <strong>Link oficial de Payphone</strong> por WhatsApp para ingresar tu tarjeta de crédito o débito de forma 100% segura y diferir tus cuotas.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Pago protegido. No guardamos los datos de tu tarjeta.</span>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Footer del Carrito */}
-          {!isCheckingOut && cart.length > 0 && (
-            <div className="p-6 border-t border-slate-800 bg-slate-900/95 space-y-4">
-              <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between text-slate-400">
-                  <span>Subtotal:</span>
+          {/* Footer Resumen de Facturación */}
+          {cart.length > 0 && (
+            <div className="p-4 sm:p-5 border-t border-slate-800 bg-slate-950 space-y-3">
+              <div className="space-y-1.5 text-xs text-slate-400">
+                <div className="flex justify-between">
+                  <span>Subtotal ({cart.reduce((a, b) => a + b.quantity, 0)} uds.):</span>
                   <span className="text-white font-semibold">${subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-slate-400 text-xs">
-                  <span>Envío:</span>
-                  <span className="text-emerald-400">
-                    {subtotal > 150 ? 'Gratis en compras +$150' : `$${shipping.toFixed(2)}`}
+                <div className="flex justify-between">
+                  <span>Envío Servientrega:</span>
+                  <span className="text-emerald-400 font-semibold">
+                    {shippingServientrega === 0 ? 'Gratis (+ $150)' : `$${shippingServientrega.toFixed(2)}`}
                   </span>
                 </div>
-                <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-slate-800">
-                  <span>Total estimado:</span>
-                  <span className="text-cyan-400 text-lg">${total.toFixed(2)}</span>
+                {paymentMethod === 'payphone' && step === 3 && (
+                  <div className="flex justify-between text-cyan-400">
+                    <span>Recargo tarjeta (5%):</span>
+                    <span>${cardFee.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-base font-black text-white pt-2 border-t border-slate-800">
+                  <span>Total a pagar:</span>
+                  <span className="text-emerald-400 text-lg">${total.toFixed(2)} USD</span>
                 </div>
               </div>
 
-              <button
-                onClick={() => setIsCheckingOut(true)}
-                className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2 group"
-              >
-                <span>Finalizar Pedido vía WhatsApp</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
+              {/* Botón de Acción según el paso */}
+              {step === 1 && (
+                <button
+                  onClick={() => setStep(2)}
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 text-xs sm:text-sm"
+                >
+                  <span>Continuar con Datos de Envío</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
+
+              {step === 2 && (
+                <button
+                  type="submit"
+                  form="step2-form"
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 text-xs sm:text-sm"
+                >
+                  <span>Continuar al Método de Pago</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
+
+              {step === 3 && (
+                <button
+                  onClick={() => handleFinishWhatsApp()}
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 text-sm"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Enviar pedido por WhatsApp</span>
+                </button>
+              )}
             </div>
           )}
         </div>

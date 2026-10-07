@@ -4,6 +4,8 @@ import './globals.css';
 import { CartProvider } from '@/context/CartContext';
 import { ProductProvider } from '@/context/ProductContext';
 import { CartDrawer } from '@/components/CartDrawer';
+import { WhatsAppFloatingButton } from '@/components/WhatsAppFloatingButton';
+import { MobileBottomNav } from '@/components/MobileBottomNav';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -19,11 +21,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className="dark">
-      <body className={`${inter.className} bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-slate-950`}>
+      <body className={`${inter.className} bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-slate-950 pb-14 md:pb-0`}>
         <ProductProvider>
           <CartProvider>
             {children}
             <CartDrawer />
+            <WhatsAppFloatingButton />
+            <MobileBottomNav />
           </CartProvider>
         </ProductProvider>
       </body>
