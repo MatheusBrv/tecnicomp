@@ -22,10 +22,29 @@ export function ProductProvider({ children }: { children: React.ReactNode }) {
     try {
       const stored = localStorage.getItem('tecnicomp_custom_products');
       if (stored) {
-        setProducts(JSON.parse(stored));
+        const parsed: Product[] = JSON.parse(stored);
+        // Mezclar para que las imágenes oficiales actualizadas de INITIAL_PRODUCTS prevalezcan
+        // sobre la caché vieja del navegador
+        const merged = INITIAL_PRODUCTS.map((initProd) => {
+          const custom = parsed.find((p) => p.id === initProd.id);
+          // Si el usuario en localStorage tenía imágenes genéricas viejas de unsplash, usar la nueva
+          if (custom && custom.image.includes('unsplash.com')) {
+            return { ...custom, image: initProd.image };
+          }
+          return custom || initProd;
+        });
+
+        // Añadir también productos nuevos creados por el admin
+        const extraProducts = parsed.filter(
+          (p) => !INITIAL_PRODUCTS.some((ip) => ip.id === p.id)
+        );
+        setProducts([...merged, ...extraProducts]);
+      } else {
+        setProducts(INITIAL_PRODUCTS);
       }
     } catch (e) {
       console.error('Error cargando catálogo local:', e);
+      setProducts(INITIAL_PRODUCTS);
     } finally {
       setIsLoaded(true);
     }
